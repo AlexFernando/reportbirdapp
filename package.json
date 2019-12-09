@@ -10,6 +10,8 @@
   "license": "ISC",
   "dependencies": {
     "csv-parser": "^2.3.2",
-    "docx": "^5.0.0-rc7"
+    "docx": "^5.0.0-rc7",
+    "officegen": "^0.6.3",
+    "xlsx": "^0.15.2"
   }
 }
