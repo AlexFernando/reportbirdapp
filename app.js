@@ -10,15 +10,20 @@ let familyData = excelData.familyResults();
 
 let regExp = /\(([^)]+)\)/;
 
+let regExpAsterik = new RegExp()
+
 function filterData(results) {
+
+    let count = 0;
 
     for (let i in results) {
         let obj = results[i];
         let date = results[i]['Date'];
-        let date1 = '2018-10-14'; // parameters to filter (dates)
-        let date2 = '2018-10-15';
+        let date1 = '2019-12-28'; // parameters to filter (dates)
+        let date2 = '2019-12-28';
         //saving complete objects
         if (date >= date1 && date <= date2) {
+            count++;
             filteredData.push(obj);
         }
     }
@@ -44,9 +49,14 @@ function filterData(results) {
     let oldTestVar = '';
     let cleanKeys = [];
     let deleteDuplicates = [];
+    let matchArray = [];
+    let myArrayOfGroups = [];
+    let arrayOfPoppedElem = [];
+    let arrayOfFinalGroups = [];
 
     filteredData.map(elem => {
 
+        //To put * in Location 
         if (elem['Observation Details'] === undefined) {
             elem['Location'] += '';
             elem['Location'].trim();
@@ -57,6 +67,7 @@ function filterData(results) {
             elem['Location'].trim();
         }
 
+        //clean the objects to keep just some keys values
         const allowed = ['Common Name', 'Scientific Name', 'Location', 'Observation Details'];
 
         const filtered = Object.keys(elem)
@@ -67,10 +78,11 @@ function filterData(results) {
                     [key]: elem[key]
                 };
             }, {});
-
+        //add into an array 
         cleanKeys.push(filtered)
     })
 
+    //delete some duplicate keys
     deleteDuplicates = cleanKeys.reduce((accumulator, curr) => {
 
         let name = curr['Common Name'],
@@ -82,12 +94,16 @@ function filterData(results) {
     }, []);
 
 
+
+    //delete repeated locations
     deleteDuplicates.map(elem => {
 
         let myLocation = elem['Location'];
 
+        //converting a string into array for Location
         myLocation = elem['Location'].split(';');
 
+        //
         myLocation = myLocation.filter((item, index) => {
             return myLocation.indexOf(item) === index;
         })
@@ -96,42 +112,181 @@ function filterData(results) {
             elem['Scientific Name'] += '*';
             myLocation.unshift('');
             elem['Location'] = myLocation[0];
+        } else if (myLocation.length > 1 && myLocation.indexOf('*') > -1) {
+            let index = myLocation.indexOf('*');
+            if (index > -1) {
+                myLocation.splice(index, 1);
+            }
+            elem['Location'] = `Seen at: ${myLocation.join()}.`;
         } else {
             elem['Location'] = `Seen at: ${myLocation.join()}.`;
         }
 
+        //match identical elements between both databases base on the Enlgish and Common name
         let nameMatch = familyData.find(el => el['English name'] === elem['Common Name']);
         let familyText = '';
 
+        //creating the final array with the family name
         if (nameMatch) {
             familyText = nameMatch.family;
-            myArrayFamily = regExp.exec(familyText);
-            let testFamilyName = myArrayFamily[1];
 
-            if (oldTestVar !== testFamilyName) {
-                oldTestVar = testFamilyName;
-                realFamilyName = testFamilyName.toUpperCase();
-                objectFormat[realFamilyName] = elem;
+            if (familyText === '') {
+                familyText = '(Others)';
             }
+            //finding a match between my array of objects and the familyDataBase 
+            let myArrayFamily = regExp.exec(familyText);
+
+            if (myArrayFamily !== null) {
+                let testFamilyName = myArrayFamily[1];
+
+                let realFamilyName = testFamilyName.toUpperCase();
+
+                if (oldTestVar !== testFamilyName) {
+                    oldTestVar = testFamilyName;
+
+                    //adding the family name with uppercase letters
+                    objectFormat[realFamilyName] = new Array();
+                }
+                objectFormat[realFamilyName].push(elem)
+            }
+
         }
     })
 
-    for (let [key, value] of Object.entries(objectFormat)) {
-        let familyName = key;
-        let commonName = value['Common Name'];
-        let scientificName = ` ${value['Scientific Name']}`;
-        let locationDetails = value['Location'];
 
+    //matching only species with the content of only Peru  but not others countries or locations outside Peru
+    familyData.map(item => {
+        let RegExp = /^(?!.*(and|to|Ecuador|Brazil|Bolivia|Argentina|Colombia|Paraguay|Venezuela|Chile|Uruguay|California)).*Peru.*$/
+
+        let myMatch = RegExp.exec(item.range)
+
+        let myScientificName = item['scientific name'];
+
+        if (myMatch !== null) {
+            matchArray.push(myScientificName)
+        }
+    })
+
+    for (key in objectFormat) {
+
+        value = objectFormat[key];
+
+        for (let elem = 0; elem < value.length; elem++) {
+            let scientificName = value[elem]['Scientific Name']
+
+            let arrayScientificName = scientificName.split(' ');
+            let popped = '';
+
+            if (arrayScientificName.length >= 3) {
+                popped = arrayScientificName.pop();
+
+                arrayOfPoppedElem.push(popped);
+
+                let myGroupSpecie = arrayScientificName.join(' ');
+
+                myArrayOfGroups.push(myGroupSpecie);
+            }
+        }
+    }
+
+    for (let i = 0; i < myArrayOfGroups.length - 1; i++) {
+        if (myArrayOfGroups[i] === myArrayOfGroups[i + 1]) {
+            arrayOfFinalGroups.push(myArrayOfGroups[i])
+            arrayOfFinalGroups.push(myArrayOfGroups[i] + ' ' + arrayOfPoppedElem[i])
+            arrayOfFinalGroups.push(myArrayOfGroups[i + 1] + ' ' + arrayOfPoppedElem[i + 1])
+        }
+    }
+
+    console.log(arrayOfFinalGroups);
+
+    let numIndex = 0;
+
+    for (key in objectFormat) {
+        let familyName = key;
         pObj = docx.createP()
         pObj.addText(familyName, { bold: true, color: '188c18', font_face: 'Calibri', font_size: 16 })
         pObj.addLineBreak()
-        pObj.addText(commonName, { bold: true, font_face: 'Calibri', font_size: 12 })
-        pObj.addText(scientificName, { bold: true, font_face: 'Calibri', font_size: 12 })
-        pObj.addLineBreak()
-        pObj.addText(locationDetails, { font_face: 'Calibri', font_size: 12 })
+        value = objectFormat[key];
+
+        for (let elem = 0; elem < value.length; elem++) {
+
+            let commonName = value[elem]['Common Name'];
+            let scientificName = value[elem]['Scientific Name'];
+            let locationDetails = value[elem]['Location'];
+
+            numIndex++;
+
+            if (matchArray.includes(scientificName)) {
+                pObj.addText('E ', { bold: true, color: 'e71837', font_face: 'Calibri', font_size: 12 })
+            }
+
+            if (arrayOfFinalGroups.includes(scientificName)) {
+
+                console.log('Hola')
+
+                let convertToArr = scientificName.split(' ');
+
+
+                if (convertToArr.length === 2) {
+                    pObj.addText(numIndex + '. ', { bold: true, font_face: 'Calibri', font_size: 12 })
+                    pObj.addText(commonName, { bold: true, font_face: 'Calibri', font_size: 12 })
+                    pObj.addText(' (' + scientificName + ')', { bold: true, font_face: 'Calibri', font_size: 12 })
+                    pObj.addLineBreak()
+                    pObj.addLineBreak()
+                } else {
+                    pObj.addText('           ' + commonName + ' - ', { bold: true, font_face: 'Calibri', font_size: 12 })
+                    pObj.addText(' (' + scientificName + ')', { bold: true, font_face: 'Calibri', font_size: 12 })
+                    pObj.addLineBreak()
+                    pObj.addText('           ' + locationDetails, { font_face: 'Calibri', font_size: 12 })
+                    pObj.addLineBreak()
+                    pObj.addLineBreak()
+                }
+            } else {
+
+                pObj.addText(numIndex + '. ', { bold: true, font_face: 'Calibri', font_size: 12 })
+
+                if (scientificName.charAt(scientificName.length - 1) === '*') {
+                    scientificName = ' (' + scientificName.slice(0, scientificName.length - 1) + ')*';
+                } else {
+                    scientificName = ' (' + scientificName + ')'
+                }
+
+                pObj.addText(commonName, { bold: true, font_face: 'Calibri', font_size: 12 })
+                pObj.addText(scientificName, { bold: true, font_face: 'Calibri', font_size: 12 })
+                pObj.addLineBreak()
+                pObj.addText(locationDetails, { font_face: 'Calibri', font_size: 12 })
+                pObj.addLineBreak()
+                pObj.addLineBreak()
+            }
+        }
     }
 
+    /*
+    for (let [key, value] of Object.entries(objectFormat)) {
 
+        console.log("key: ", key)
+
+        value.map(elem => console.log(elem))
+
+        let familyName = key;
+        let commonName = value['Common Name'];
+        let scientificName = value['Scientific Name'];
+        let locationDetails = value['Location'];
+
+        if (scientificName === 'Laterallus jamaicensis tuerosi') {
+            console.log('yes');
+        }
+        addEndemicMark = matchArray.filter(elem => elem === scientificName);
+
+        //pObj = docx.createP()
+        //pObj.addText(familyName, { bold: true, color: '188c18', font_face: 'Calibri', font_size: 16 })
+        //pObj.addLineBreak()
+        //pObj.addText(commonName, { bold: true, font_face: 'Calibri', font_size: 12 })
+        //pObj.addText(scientificName, { bold: true, font_face: 'Calibri', font_size: 12 })
+        //pObj.addLineBreak()
+        //pObj.addText(locationDetails, { font_face: 'Calibri', font_size: 12 })
+    }
+    */
 
     // Let's generate the Word document into a file:
 
@@ -150,7 +305,7 @@ function filterData(results) {
 // return a Promise
 const readFilePromise = () => {
     return new Promise((resolve, reject) => {
-        fs.createReadStream('MyEBirdData.csv')
+        fs.createReadStream('MyEBirdDataFake.csv')
             .pipe(csv())
             .on('data', data => results.push(data))
             .on('end', () => {
